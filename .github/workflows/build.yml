@@ -1,0 +1,57 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Extract Project Zip
+        run: |
+          unzip -o "airtel_gx_manager (2).zip"
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Recreate Native Android Project
+        run: |
+          cd airtel_gx_manager
+          flutter create . --platforms=android --org=com.gicbroadband
+
+      - name: Enable HTTP & Disable Security Checks
+        run: |
+          sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' airtel_gx_manager/android/app/src/main/AndroidManifest.xml
+          
+          sed -i '1s/^/import "dart:io";\nclass MyHttpOverrides extends HttpOverrides { @override HttpClient createHttpClient(SecurityContext? context){ return super.createHttpClient(context)..badCertificateCallback = (X509Certificate cert, String host, int port)=> true; } }\n/' airtel_gx_manager/lib/main.dart
+          sed -i '/void main()/a \  HttpOverrides.global = MyHttpOverrides();' airtel_gx_manager/lib/main.dart
+
+      - name: Get Dependencies
+        run: |
+          cd airtel_gx_manager
+          flutter pub get
+
+      - name: Build Release APK
+        run: |
+          cd airtel_gx_manager
+          flutter build apk --release --no-tree-shake-icons
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GIC-Broadband-App
+          path: airtel_gx_manager/build/app/outputs/flutter-apk/*.apk
