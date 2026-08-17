@@ -15,7 +15,7 @@ jobs:
 
       - name: Extract Project Zip
         run: |
-          unzip -o "airtel_gx_manager (2).zip"
+          unzip -o "airtel_gx_manager (2).zip" -d extracted_app
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -28,30 +28,40 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Locate Project Root
+        id: find_dir
+        run: |
+          if [ -f "extracted_app/pubspec.yaml" ]; then
+            echo "PROJECT_DIR=extracted_app" >> $GITHUB_ENV
+          else
+            INNER_DIR=$(find extracted_app -name "pubspec.yaml" -exec dirname {} \;)
+            echo "PROJECT_DIR=$INNER_DIR" >> $GITHUB_ENV
+          fi
+
       - name: Recreate Native Android Project
         run: |
-          cd airtel_gx_manager
+          cd ${{ env.PROJECT_DIR }}
           flutter create . --platforms=android --org=com.gicbroadband
 
       - name: Enable HTTP & Disable Security Checks
         run: |
-          sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' airtel_gx_manager/android/app/src/main/AndroidManifest.xml
+          sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' ${{ env.PROJECT_DIR }}/android/app/src/main/AndroidManifest.xml
           
-          sed -i '1s/^/import "dart:io";\nclass MyHttpOverrides extends HttpOverrides { @override HttpClient createHttpClient(SecurityContext? context){ return super.createHttpClient(context)..badCertificateCallback = (X509Certificate cert, String host, int port)=> true; } }\n/' airtel_gx_manager/lib/main.dart
-          sed -i '/void main()/a \  HttpOverrides.global = MyHttpOverrides();' airtel_gx_manager/lib/main.dart
+          sed -i '1s/^/import "dart:io";\nclass MyHttpOverrides extends HttpOverrides { @override HttpClient createHttpClient(SecurityContext? context){ return super.createHttpClient(context)..badCertificateCallback = (X509Certificate cert, String host, int port)=> true; } }\n/' ${{ env.PROJECT_DIR }}/lib/main.dart
+          sed -i '/void main()/a \  HttpOverrides.global = MyHttpOverrides();' ${{ env.PROJECT_DIR }}/lib/main.dart
 
       - name: Get Dependencies
         run: |
-          cd airtel_gx_manager
+          cd ${{ env.PROJECT_DIR }}
           flutter pub get
 
       - name: Build Release APK
         run: |
-          cd airtel_gx_manager
+          cd ${{ env.PROJECT_DIR }}
           flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: GIC-Broadband-App
-          path: airtel_gx_manager/build/app/outputs/flutter-apk/*.apk
+          path: ${{ env.PROJECT_DIR }}/build/app/outputs/flutter-apk/*.apk
