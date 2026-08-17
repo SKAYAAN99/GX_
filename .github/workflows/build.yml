@@ -37,30 +37,28 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          cache: true
 
-      - name: Recreate Native Android Project
+      - name: Configure Android Manifest & HTTP Security
         run: |
           cd "$PROJECT_DIR"
-          flutter create . --platforms=android --org=com.gicbroadband
-
-      - name: Enable HTTP & Disable Security Checks
-        run: |
-          sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' "$PROJECT_DIR/android/app/src/main/AndroidManifest.xml"
+          # Ensure cleartext traffic is allowed
+          if [ -f "android/app/src/main/AndroidManifest.xml" ]; then
+            sed -i 's/<application/<application android:usesCleartextTraffic="true"/g' android/app/src/main/AndroidManifest.xml
+          fi
           
-          sed -i '1s/^/import "dart:io";\nclass MyHttpOverrides extends HttpOverrides { @override HttpClient createHttpClient(SecurityContext? context){ return super.createHttpClient(context)..badCertificateCallback = (X509Certificate cert, String host, int port)=> true; } }\n/' "$PROJECT_DIR/lib/main.dart"
-          sed -i '/void main()/a \  HttpOverrides.global = MyHttpOverrides();' "$PROJECT_DIR/lib/main.dart"
+          # Inject SSL bypass into main.dart
+          sed -i '1s/^/import "dart:io";\nclass MyHttpOverrides extends HttpOverrides { @override HttpClient createHttpClient(SecurityContext? context){ return super.createHttpClient(context)..badCertificateCallback = (X509Certificate cert, String host, int port)=> true; } }\n/' lib/main.dart
+          sed -i '/void main()/a \  HttpOverrides.global = MyHttpOverrides();' lib/main.dart
 
       - name: Get Dependencies
         run: |
           cd "$PROJECT_DIR"
           flutter pub get
 
-      - name: Fix Android Permissions & Build Release APK
+      - name: Build APK (Fat APK)
         run: |
           cd "$PROJECT_DIR"
-          if [ -f "android/gradlew" ]; then chmod +x android/gradlew; fi
-          flutter build apk --release --no-tree-shake-icons --verbose
+          flutter build apk --debug --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
